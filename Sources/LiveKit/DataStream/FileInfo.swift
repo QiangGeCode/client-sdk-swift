@@ -18,7 +18,9 @@
 import UniformTypeIdentifiers
 #endif
 
+#if !os(iOS)
 import CoreServices
+#endif
 
 /// Basic information about a file required to send it over a data stream.
 struct FileInfo: Equatable {
@@ -31,9 +33,15 @@ extension FileInfo {
     /// Reads information from the file located at the given URL.
     init?(for fileURL: URL) {
         var resourceKeys: Set<URLResourceKey> = [.nameKey, .fileSizeKey]
+        #if os(iOS)
+        if #available(iOS 14.0, *) {
+            resourceKeys.insert(.contentTypeKey)
+        }
+        #else
         if #available(macOS 11.0, iOS 14.0, *) {
             resourceKeys.insert(.contentTypeKey)
         }
+        #endif
 
         guard let resourceValues = try? fileURL.resourceValues(forKeys: resourceKeys),
               let name = resourceValues.name,
@@ -42,6 +50,13 @@ extension FileInfo {
         self.name = name
         self.size = size
 
+        #if os(iOS)
+        if #available(iOS 14.0, *) {
+            mimeType = resourceValues.contentType?.preferredMIMEType
+        } else {
+            mimeType = nil
+        }
+        #else
         guard #available(macOS 11.0, iOS 14.0, *) else {
             guard let uti = UTTypeCreatePreferredIdentifierForTag(
                 kUTTagClassFilenameExtension,
@@ -58,6 +73,7 @@ extension FileInfo {
         }
 
         mimeType = resourceValues.contentType?.preferredMIMEType
+        #endif
     }
 }
 
@@ -68,6 +84,11 @@ extension FileInfo {
             // Special case not handled by UTType
             return "bin"
         }
+        #if os(iOS)
+        guard #available(iOS 14.0, *) else { return nil }
+        guard let utType = UTType(mimeType: mimeType) else { return nil }
+        return utType.preferredFilenameExtension
+        #else
         guard #available(macOS 11.0, iOS 14.0, *) else {
             guard let uti = UTTypeCreatePreferredIdentifierForTag(
                 kUTTagClassMIMEType,
@@ -86,5 +107,6 @@ extension FileInfo {
         }
         guard let utType = UTType(mimeType: mimeType) else { return nil }
         return utType.preferredFilenameExtension
+        #endif
     }
 }
